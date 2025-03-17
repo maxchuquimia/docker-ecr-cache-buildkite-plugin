@@ -1,3 +1,63 @@
+# Cross-platform SHA1 function that works on Linux and macOS
+crossplatform_sha1sum() {
+  if command -v sha1sum >/dev/null 2>&1; then
+    if [[ $# -eq 0 ]]; then
+      # No arguments means read from stdin (pipe)
+      sha1sum
+    else
+      # File arguments provided
+      sha1sum "$@"
+    fi
+  else
+    # Fall back to shasum -a 1 on macOS
+    if [[ $# -eq 0 ]]; then
+      # No arguments means read from stdin (pipe)
+      shasum -a 1
+    else
+      # File arguments provided
+      shasum -a 1 "$@"
+    fi
+  fi
+}
+
+# Cross-platform glob function that works on Linux and macOS
+# Handles recursive globbing (** patterns) on systems without `shopt -s globstar` support
+crossplatform_expand_glob() {
+  local pattern="$1"
+  local results=()
+
+  # Check if the pattern contains ** for recursive globbing
+  if [[ "$pattern" == *"**"* ]]; then
+    # Extract the directory part before **
+    local base_dir="${pattern%%\*\**}"
+    if [[ -z "$base_dir" ]]; then
+      base_dir="."
+    fi
+
+    # Extract the pattern after **
+    local file_pattern="${pattern#*\*\*}"
+    # Remove leading / if present
+    file_pattern="${file_pattern#/}"
+
+    # Use find to recursively find files matching the pattern
+    while IFS= read -r file; do
+      results+=("$file")
+    done < <(find "$base_dir" -type f -path "*${file_pattern}" 2>/dev/null)
+  else
+    # For non-recursive patterns, use basic globbing
+    for file in $pattern; do
+      if [[ -f "$file" ]]; then
+        results+=("$file")
+      fi
+    done
+  fi
+
+  # Output the results
+  for file in "${results[@]}"; do
+    echo "$file"
+  done
+}
+
 echoerr() {
   echo "$@" 1>&2;
 }
@@ -71,12 +131,12 @@ compute_tag() {
 
   echoerr 'DOCKERFILE'
   echoerr "+ ${docker_file}:${target:-"<target>"}"
-  sums="$(cd ${docker_file_dir}; sha1sum $(basename ${docker_file}))"
-  sums+="$(echo "${target}" | sha1sum)"
+  sums="$(cd ${docker_file_dir}; crossplatform_sha1sum $(basename ${docker_file}))"
+  sums+="$(echo "${target}" | crossplatform_sha1sum)"
 
   echoerr 'ARCHITECTURE'
   echoerr "+ $(uname -m)"
-  sums+="$(uname -m | sha1sum)"
+  sums+="$(uname -m | crossplatform_sha1sum)"
 
   echoerr 'BUILD_ARGS'
   read_list_property 'BUILD_ARGS'
@@ -88,22 +148,19 @@ compute_tag() {
       arg+="=${!arg:-}"
     fi
 
-    sums+="$(echo "${arg}" | sha1sum)"
+    sums+="$(echo "${arg}" | crossplatform_sha1sum)"
   done
-  
+
   if [[ -n "${BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_ADDITIONAL_BUILD_ARGS:-}" ]]; then
     echoerr 'ADDITIONAL_BUILD_ARGS'
-    sums+="$(echo "${BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_ADDITIONAL_BUILD_ARGS}" | sha1sum)"
+    sums+="$(echo "${BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_ADDITIONAL_BUILD_ARGS}" | crossplatform_sha1sum)"
   fi
-
-  # expand ** in cache-on properties
-  shopt -s globstar
 
   echoerr 'CACHE_ON'
   read_list_property 'CACHE_ON'
-  for glob in ${result[@]+"${result[@]}"}; do
-    echoerr "${glob}"
-    for file in ${glob}; do
+  for glob_pattern in ${result[@]+"${result[@]}"}; do
+    echoerr "${glob_pattern}"
+    while IFS= read -r file; do
       echoerr "+ ${file}"
       if [[ "${file}" == *.json#* ]]; then
         # Extract the file path and keys from the pattern
@@ -112,13 +169,13 @@ compute_tag() {
 
         # Read the JSON file and calculate sha1sum only for the specified keys
         value=$(jq -r "${keys}" "${file_path}")
-        sums+="$(echo -n "${value}" | sha1sum)"
+        sums+="$(echo -n "${value}" | crossplatform_sha1sum)"
       else
         # Calculate sha1sum for the whole file
-        sums+="$(sha1sum "${file}")"
+        sums+="$(crossplatform_sha1sum "${file}")"
       fi
-    done
+    done < <(crossplatform_expand_glob "${glob_pattern}")
   done
 
-  echo "${sums}" | sha1sum | cut -c-7
+  echo "${sums}" | crossplatform_sha1sum | cut -c-7
 }
