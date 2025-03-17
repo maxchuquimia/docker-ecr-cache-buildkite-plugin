@@ -5,9 +5,6 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stdlib.bash" || exit 67
 source "$(dirname "${BASH_SOURCE[0]}")/lib/${BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_REGISTRY_PROVIDER:-"ecr"}-registry-provider.bash" ||
   log_fatal "Failed to source registry-provider. BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_REGISTRY_PROVIDER must be set to one of [ecr, gcr]" 67
-export DOCKER_HOST=unix:///Users/$USER/Library/Containers/com.docker.docker/Data/docker.raw.sock
-
-ls /Users/$USER/Library/Containers/com.docker.docker/Data/
 
 login
 configure_registry_for_image_if_necessary
