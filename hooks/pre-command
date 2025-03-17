@@ -46,7 +46,6 @@ else
     image_build_args=(
       "build"
       "--file=${docker_file}"
-      "--progress=plain"
       "--tag=${image}:${tag}"
     )
     if [[ -n "${target:-}" ]]; then
