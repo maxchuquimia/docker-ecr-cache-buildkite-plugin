@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+set -x
+
 # shellcheck source=lib/stdlib.bash
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stdlib.bash" || exit 67
 source "$(dirname "${BASH_SOURCE[0]}")/lib/${BUILDKITE_PLUGIN_DOCKER_ECR_CACHE_REGISTRY_PROVIDER:-"ecr"}-registry-provider.bash" ||
